@@ -1,9 +1,9 @@
 [project]
-name = "ComfyUI_IF_AI_LoadImages"
+name = "comfyui_if_ai_loadimages"
 description = "It Load Images with subfolders form arbitrary folders previous on node outputs lists- convinient selection via file browser"
 version = "1.0.0"
-license = { file = "LICENSE" } 
-dependencies = []
+license = { file = "LICENSE.txt" } 
+dependencies = ["pillow"]
 
 [project.urls]
 Repository = "https://github.com/if-ai/ComfyUI_IF_AI_LoadImages"
@@ -11,5 +11,5 @@ Repository = "https://github.com/if-ai/ComfyUI_IF_AI_LoadImages"
 
 [tool.comfy]
 PublisherId = "impactframes"
-DisplayName = "ComfyUI_IF_AI_LoadImages"
+DisplayName = "ComfyUI IF Load Images"
 Icon = ""
