@@ -376,7 +376,7 @@ class ImageManager:
         else:  # alphabetical
             return sorted(files)
 
-class IFLoadImagesS:
+class IFLoadImagess:
     def __init__(self):
         self.path_cache = {}  # Cache for path mapping
         
