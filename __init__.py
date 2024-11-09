@@ -4,7 +4,7 @@ import shutil
 import sys
 import folder_paths
 
-from .IFLoadImagesSNode import IFLoadImagess
+from .IFLoadImagesNodeS import IFLoadImagess
 
 
 
