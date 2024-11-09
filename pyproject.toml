@@ -12,4 +12,4 @@ Repository = "https://github.com/if-ai/ComfyUI_IF_AI_LoadImages"
 [tool.comfy]
 PublisherId = "impactframes"
 DisplayName = "ComfyUI_IF_AI_LoadImages"
-Icon = "💥🎞️"
+Icon = ""
