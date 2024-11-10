@@ -1,4 +1,4 @@
-# ComfyUI-IF_AI_LoadImages
+# ComfyUI_IF_AI_LoadImages
 
 This tool enables you to load images from arbitrary folder selections, display previews of the images within subfolders, and output a list of images so you can work with multiple images simultaneously.
 
