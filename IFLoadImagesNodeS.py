@@ -388,7 +388,6 @@ class IFLoadImagess:
                             if f.startswith(ImageManager.THUMBNAIL_PREFIX)])
         available_images = max(1, available_images)  # Ensure at least 1
         
-        # Get thumbnail files
         files = [f for f in os.listdir(input_dir) 
                 if f.startswith(ImageManager.THUMBNAIL_PREFIX)]
         
@@ -397,7 +396,8 @@ class IFLoadImagess:
                 "image": (sorted(files), {"image_upload": True}),
                 "input_path": ("STRING", {"default": ""}),
                 "start_index": ("INT", {"default": 0, "min": 0, "max": 9999}),
-                "max_images": ("INT", {"default": available_images, "min": 1, "max": available_images}),
+                "stop_index": ("INT", {"default": 10, "min": 1, "max": 9999}),  # Changed to stop_index
+                "load_limit": (["10", "100", "1000", "10000", "100000"], {"default": "1000"}),
                 "image_selected": ("BOOLEAN", {"default": False}),
                 "available_image_count": ("INT", {
                     "default": available_images,
@@ -408,10 +408,6 @@ class IFLoadImagess:
                 "include_subfolders": ("BOOLEAN", {"default": True}),
                 "sort_method": (["alphabetical", "numerical", "date_created", "date_modified"],),
                 "filter_type": (["none", "png", "jpg", "jpeg", "webp", "gif", "bmp"],),
-            },
-            "hidden": {
-                "image_name": "IMAGE_NAME",
-                "unique_id": "UNIQUE_ID"
             }
         }
 
@@ -445,14 +441,15 @@ class IFLoadImagess:
             logging.warning(f"Error in IS_CHANGED: {e}")
             return float("NaN")
 
-    def load_images(self, image="", input_path="", start_index=0, max_images=1,
-               image_selected=False, available_image_count=0, include_subfolders=True, 
-               sort_method="numerical", filter_type="none", image_name="", unique_id=None):
+    def load_images(self, image="", input_path="", start_index=0, stop_index=10,
+               load_limit="1000", image_selected=False, available_image_count=0, 
+               include_subfolders=True, sort_method="numerical", 
+               filter_type="none", image_name="", unique_id=None):
         try:
             # Process input path
             abs_path = os.path.abspath(input_path if os.path.isabs(input_path) 
                                     else os.path.join(folder_paths.get_input_directory(), input_path))
-                
+                    
             # Get all valid images first
             all_files = ImageManager.get_image_files(abs_path, include_subfolders, filter_type)
             if not all_files:
@@ -462,39 +459,34 @@ class IFLoadImagess:
 
             # Sort files
             all_files = ImageManager.sort_files(all_files, sort_method)
+            total_files = len(all_files)
             
+            # Validate indices
+            start_index = min(max(0, start_index), total_files)
+            stop_index = min(max(start_index + 1, stop_index), total_files)
+            num_images = min(stop_index - start_index, int(load_limit))
+                
             # Generate thumbnails
             success, _, all_thumbnails, image_order = ImageManager.create_thumbnails(
                 abs_path, include_subfolders, filter_type, sort_method,
-                start_index, max_images
+                start_index=start_index,
+                max_images=num_images
             )
 
             # Handle image selection
             if image_selected and image in image_order:
                 start_index = image_order[image]
-                max_images = 1
+                num_images = 1
 
             # Create path mapping
             self.path_cache = {
-                thumb: orig for thumb, orig in zip(all_thumbnails, all_files)
+                thumb: orig for thumb, orig in zip(all_thumbnails, all_files[start_index:start_index + num_images])
             }
             
             # Process selected range
-            total_files = len(all_files)
-            start_idx = min(max(0, start_index), total_files)
-            end_idx = min(start_idx + max_images, total_files)
-            
-            selected_files = all_files[start_idx:end_idx]
-            selected_thumbnails = all_thumbnails[start_idx:end_idx]
-            
-            # Process selected range
-            total_files = len(all_files)
-            start_idx = min(max(0, start_index), total_files)
-            end_idx = min(start_idx + max_images, total_files)
-            
-            selected_files = all_files[start_idx:end_idx]
-            selected_thumbnails = all_thumbnails[start_idx:end_idx]
-            
+            selected_files = all_files[start_index:start_index + num_images]
+            selected_thumbnails = all_thumbnails[:num_images]  
+                
             # Process selected files
             images = []
             masks = []
@@ -526,9 +518,9 @@ class IFLoadImagess:
                         masks.append(mask.unsqueeze(0))
                         paths.append(file_path)
                         filenames.append(os.path.basename(file_path))
-                        count_str = f"{idx + 1}/{total_files}"
+                        count_str = f"{start_index + idx + 1}/{total_files}"  # Update count to show global position
                         count_strs.append(count_str)
-                        count_ints.append(idx + 1)
+                        count_ints.append(start_index + idx + 1)
 
                 except Exception as e:
                     logger.error(f"Error processing image {file_path}: {e}")
@@ -541,10 +533,12 @@ class IFLoadImagess:
             ui_data = {
                 "images": all_thumbnails,
                 "current_thumbnails": selected_thumbnails,
-                "total_images": len(all_thumbnails),
+                "total_images": total_files,
                 "path_mapping": self.path_cache,
-                "available_image_count": len(all_thumbnails),
-                "image_order": image_order
+                "available_image_count": total_files,
+                "image_order": image_order,
+                "start_index": start_index,
+                "stop_index": start_index + num_images
             }
             
             return {
@@ -631,29 +625,64 @@ async def refresh_previews(request):
         if not data.get("input_path"):
             raise ValueError("No input path provided")
 
-        # Extract all parameters including max_images
-        max_images = data.get("max_images", None)
-        if max_images is not None:
-            max_images = int(max_images)
+        # Extract parameters
+        load_limit = int(data.get("load_limit", "1000"))
+        start_index = int(data.get("start_index", 0))
+        stop_index = int(data.get("stop_index", 10))
+        include_subfolders = data.get("include_subfolders", True)
+        filter_type = data.get("filter_type", "none")
+        sort_method = data.get("sort_method", "alphabetical")
+
+        # Get files
+        if not os.path.isabs(data["input_path"]):
+            abs_path = os.path.abspath(os.path.join(folder_paths.get_input_directory(), data["input_path"]))
+        else:
+            abs_path = data["input_path"]
+
+        # Get all files and sort them
+        all_files = ImageManager.get_image_files(abs_path, include_subfolders, filter_type)
+        if not all_files:
+            return web.json_response({
+                "success": False,
+                "error": "No valid images found"
+            })
+        
+        all_files = sorted(all_files, 
+                         key=numerical_sort_key if sort_method == "numerical" 
+                         else os.path.getctime if sort_method == "date_created"
+                         else os.path.getmtime if sort_method == "date_modified"
+                         else str)
+        
+        total_available = len(all_files)
+        
+        # Validate and adjust indices
+        start_index = min(max(0, start_index), total_available)
+        stop_index = min(max(start_index + 1, stop_index), total_available)
+        
+        # Calculate how many images to actually load
+        num_images = min(stop_index - start_index, load_limit)
             
-        # Pass max_images to create_thumbnails
+        # Create thumbnails only for the selected range
         success, message, thumbnails, image_order = ImageManager.create_thumbnails(
             data["input_path"],
-            include_subfolders=data.get("include_subfolders", True),
-            filter_type=data.get("filter_type", "none"),
-            sort_method=data.get("sort_method", "alphabetical"),
-            start_index=int(data.get("start_index", 0)),
-            max_images=max_images  # Pass the limit
+            include_subfolders=include_subfolders,
+            filter_type=filter_type,
+            sort_method=sort_method,
+            start_index=start_index,
+            max_images=num_images  # Only create thumbnails for the range we want
         )
         
         return web.json_response({
             "success": success,
             "message": message,
             "thumbnails": thumbnails,
-            "total_images": len(thumbnails),
-            "available_image_count": len(thumbnails),
-            "image_order": image_order  # Include image_order in response
+            "total_images": total_available,
+            "visible_images": len(thumbnails),
+            "start_index": start_index,
+            "stop_index": stop_index,
+            "image_order": image_order
         })
+
     except Exception as e:
         logger.error(f"Error in refresh_previews route: {str(e)}")
         return web.json_response({
@@ -686,5 +715,5 @@ NODE_CLASS_MAPPINGS = {
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "IF_LoadImagesS": "IF Load ImagesS 🖼️"
+    "IF_LoadImagesS": "IF Load Images S 🖼️"
 }

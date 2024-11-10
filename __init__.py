@@ -14,7 +14,7 @@ NODE_CLASS_MAPPINGS = {
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "IF_LoadImagesS": "IF Load ImagesS 🖼️",
+    "IF_LoadImagesS": "IF Load Images S 🖼️",
 }
 
 WEB_DIRECTORY = "./web"

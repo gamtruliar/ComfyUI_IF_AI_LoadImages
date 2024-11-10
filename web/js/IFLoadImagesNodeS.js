@@ -170,7 +170,7 @@ app.registerExtension({
             const backupBtn = this.addWidget("button", "backup_input", "Backup Input 💾", 
                 async () => {
                     try {
-                        const response = await api.fetchApi("/ifai/backup_input", {
+                        const response = await api.fetchApi("/if_ai/backup_input", {
                             method: "POST"
                         });
                         
@@ -192,7 +192,7 @@ app.registerExtension({
             const restoreBtn = this.addWidget("button", "restore_input", "Restore Input ♻️", 
                 async () => {
                     try {
-                        const response = await api.fetchApi("/ifai/restore_input", {
+                        const response = await api.fetchApi("/if_ai/restore_input", {
                             method: "POST"
                         });
                         
@@ -217,37 +217,45 @@ app.registerExtension({
                 }
             );
 
-            
-            // Add refresh button
+            // In the refresh button callback
             const refreshBtn = this.addWidget("button", "refresh_preview", "Refresh Previews 🔄", async () => {
-                // In the refresh button callback:
                 try {
                     const inputPath = this.widgets.find(w => w.name === "input_path")?.value;
                     if (!inputPath) {
                         alert("Please select a folder first");
                         return;
                     }
-
-                    // Include max_images in options
+            
+                    // Get widget values
+                    const startIndexWidget = this.widgets.find(w => w.name === "start_index");
+                    const stopIndexWidget = this.widgets.find(w => w.name === "stop_index");
+                    
+                    if (stopIndexWidget.value <= startIndexWidget.value) {
+                        alert("Stop index must be greater than start index");
+                        return;
+                    }
+            
                     const options = {
                         input_path: inputPath,
                         include_subfolders: this.widgets.find(w => w.name === "include_subfolders")?.value ?? true,
                         sort_method: this.widgets.find(w => w.name === "sort_method")?.value ?? "alphabetical",
                         filter_type: this.widgets.find(w => w.name === "filter_type")?.value ?? "none",
-                        max_images: this.widgets.find(w => w.name === "max_images")?.value
+                        start_index: startIndexWidget.value,
+                        stop_index: stopIndexWidget.value,
+                        load_limit: parseInt(this.widgets.find(w => w.name === "load_limit")?.value || "1000")
                     };
-
-                    const response = await api.fetchApi("/ifai/refresh_previews", {
+            
+                    const response = await api.fetchApi("/if_ai/refresh_previews", {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify(options)
                     });
-
+            
                     if (!response.ok) throw new Error(await response.text());
                     const result = await response.json();
                     
                     if (!result.success) throw new Error(result.error);
-
+            
                     // Update widgets
                     const imageWidget = this.widgets?.find(w => w.name === "image");
                     const availableCountWidget = this.widgets?.find(w => w.name === "available_image_count");
@@ -255,14 +263,20 @@ app.registerExtension({
                     if (imageWidget && result.thumbnails?.length) {
                         imageWidget.options.values = result.thumbnails;
                         imageWidget.value = result.thumbnails[0];
-                        this.imageOrder = result.image_order || {};  // Store the image order
+                        this.imageOrder = result.image_order || {};
                         imageWidget.callback.call(imageWidget);
                     }
                     
+                    // Update the available count
                     if (availableCountWidget) {
-                        availableCountWidget.value = result.available_image_count;
+                        availableCountWidget.value = result.total_images;
                     }
-
+            
+                    // Update stop_index if needed
+                    if (result.stop_index !== stopIndexWidget.value) {
+                        stopIndexWidget.value = result.stop_index;
+                    }
+            
                 } catch (error) {
                     console.error("Error refreshing previews:", error);
                     alert("Error refreshing previews: " + error.message);
@@ -328,7 +342,7 @@ app.registerExtension({
         nodeType.prototype.backupInputFolder = async function() {
             try {
                 this.showLoader();
-                const response = await fetch("/ifai/backup_input", {
+                const response = await fetch("/if_ai/backup_input", {
                     method: "POST"
                 });
                 
@@ -351,7 +365,7 @@ app.registerExtension({
         nodeType.prototype.restoreInputFolder = async function() {
             try {
                 this.showLoader();
-                const response = await fetch("/ifai/restore_input", {
+                const response = await fetch("/if_ai/restore_input", {
                     method: "POST"
                 });
                 
@@ -386,7 +400,7 @@ app.registerExtension({
 
                 this.showLoader();
 
-                const response = await fetch("/ifai/refresh_previews", {
+                const response = await fetch("/if_ai/refresh_previews", {
                     method: "POST",
                     headers: {
                         "Content-Type": "application/json"
