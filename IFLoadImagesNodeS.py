@@ -444,7 +444,7 @@ class IFLoadImagess:
     def load_images(self, image="", input_path="", start_index=0, stop_index=10,
                load_limit="1000", image_selected=False, available_image_count=0, 
                include_subfolders=True, sort_method="numerical", 
-               filter_type="none", image_name="", unique_id=None):
+               filter_type="none", image_name="", unique_id=None, load_limit="1000"):
         try:
             # Process input path
             abs_path = os.path.abspath(input_path if os.path.isabs(input_path) 
