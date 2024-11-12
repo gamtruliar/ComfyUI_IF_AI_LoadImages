@@ -418,7 +418,7 @@ class IFLoadImagess:
     CATEGORY = "ImpactFrames💥🎞️"
 
     @classmethod
-    def IS_CHANGED(cls, image, input_path="", start_index=0, max_images=1,
+    def IS_CHANGED(cls, image, input_path="", start_index=0, stop_index=0, max_images=1,
                 include_subfolders=True, sort_method="numerical", 
                 filter_type="none", image_name="", unique_id=None):
         """
