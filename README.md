@@ -21,7 +21,7 @@ This tool enables you to load images from arbitrary folder selections, display p
 
 
 ## TODO
-
+- [] fix image extension filters
 - [ ] Add a counter to enable loops.
 - [ ] Add support for video files.
 
