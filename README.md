@@ -27,7 +27,8 @@ This tool enables you to load images from arbitrary folder selections, display p
 ![Image Preview 1](https://github.com/user-attachments/assets/55c67132-f7f5-4755-afef-7f9d5679c1d0)
 
 ## TODO
-- [ ] Fix image extension filters
+- [x] Fix image extension filters
+- [ ] Fix Masks from mask editor
 - [ ] Fix single image upload
 - [ ] Add a counter to enable loops
 - [ ] Add support for video files
