@@ -1,7 +1,7 @@
 [project]
 name = "comfyui_if_ai_loadimages"
 description = "It Load Images with subfolders form arbitrary folders previous on node outputs lists- convinient selection via file browser"
-version = "1.0.3"
+version = "1.0.4"
 license = { file = "LICENSE.txt" } 
 dependencies = ["pillow", "numpy"]
 
