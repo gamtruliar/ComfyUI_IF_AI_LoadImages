@@ -413,16 +413,17 @@ class IFLoadImagess:
             }
         }
 
-    RETURN_TYPES = ("IMAGE", "MASK", "STRING", "STRING", "STRING", "INT")
-    RETURN_NAMES = ("images", "masks", "image_paths", "filenames", "count_str", "count_int")
-    OUTPUT_IS_LIST = (True, True, True, True, True, True)  # Keep as list outputs
+    RETURN_TYPES = ("IMAGE", "MASK", "STRING", "STRING", "STRING", "INT", "IMAGE", "MASK")
+    RETURN_NAMES = ("images", "masks", "image_paths", "filenames", "count_str", "count_int", "images_batch", "masks_batch")
+    OUTPUT_IS_LIST = (True, True, True, True, True, True, False, False)
     FUNCTION = "load_images"
-    CATEGORY = "ImpactFrames💥🎞️"
+    CATEGORY = "ImpactFrames💥🎞️/images"
 
     @classmethod
     def IS_CHANGED(cls, image, input_path="", start_index=0, stop_index=0, max_images=1,
                 include_subfolders=True, sort_method="numerical", image_selected=False, 
-                filter_type="none", image_name="", unique_id=None, load_limit="1000", available_image_count=0, channel="alpha"  ):
+                filter_type="none", image_name="", unique_id=None, load_limit="1000", 
+                available_image_count=0, channel="alpha"  ):
         """
         Properly handle all input parameters and return NaN to force updates
         This matches the input parameters from INPUT_TYPES
@@ -444,9 +445,9 @@ class IFLoadImagess:
             return float("NaN")
 
     def load_images(self, image="", input_path="", start_index=0, stop_index=10,
-               load_limit="1000", image_selected=False, available_image_count=0, 
-               include_subfolders=True, sort_method="numerical", 
-               filter_type="none", channel="alpha"):
+                   load_limit="1000", image_selected=False, available_image_count=0, 
+                   include_subfolders=True, sort_method="numerical", 
+                   filter_type="none", channel="alpha"):
         try:
             # Process input path
             abs_path = os.path.abspath(input_path if os.path.isabs(input_path) 
@@ -457,7 +458,8 @@ class IFLoadImagess:
             if not all_files:
                 logger.warning(f"No valid images found in {abs_path}")
                 img_tensor, mask = self.load_placeholder()
-                return ([img_tensor], [mask], [""], [""], ["0/0"], [0])
+                return ([img_tensor], [mask], [""], [""], ["0/0"], [0], 
+                       img_tensor.unsqueeze(0), mask.unsqueeze(0))
 
             # Sort files
             all_files = ImageManager.sort_files(all_files, sort_method)
@@ -490,7 +492,23 @@ class IFLoadImagess:
             filenames = []
             count_strs = []
             count_ints = []
+            
+            # Track max dimensions for resizing
+            max_height = 0
+            max_width = 0
+            
+            # First pass to determine max dimensions
+            for file_path in selected_files:
+                try:
+                    with Image.open(file_path) as img:
+                        img = ImageOps.exif_transpose(img)
+                        max_height = max(max_height, img.height)
+                        max_width = max(max_width, img.width)
+                except Exception as e:
+                    logger.error(f"Error checking dimensions of {file_path}: {e}")
+                    continue
 
+            # Second pass to load and resize images
             for idx, file_path in enumerate(selected_files):
                 try:
                     img = Image.open(file_path)
@@ -498,12 +516,15 @@ class IFLoadImagess:
                     
                     if img.mode == 'I':
                         img = img.point(lambda i: i * (1 / 255))
+                    
+                    # Resize to match max dimensions
                     image = img.convert('RGB')
+                    if image.size != (max_width, max_height):
+                        image = image.resize((max_width, max_height), Image.Resampling.LANCZOS)
                     
                     # Convert to numpy array and normalize
                     image_array = np.array(image).astype(np.float32) / 255.0
-                    # Correct order: [1, H, W, 3]
-                    image_tensor = torch.from_numpy(image_array).unsqueeze(0)
+                    image_tensor = torch.from_numpy(image_array).unsqueeze(0)  # [1, H, W, 3]
                     images.append(image_tensor)
                     
                     # Handle mask based on selected channel
@@ -517,8 +538,17 @@ class IFLoadImagess:
                         if c == 'A':
                             mask = 1. - mask
                     else:
-                        mask = torch.zeros((image_array.shape[0], image_array.shape[1]), 
+                        mask = torch.zeros((max_height, max_width), 
                                        dtype=torch.float32, device="cpu")
+                    
+                    # Resize mask if needed
+                    if mask.shape != (max_height, max_width):
+                        mask = torch.nn.functional.interpolate(
+                            mask.unsqueeze(0).unsqueeze(0),
+                            size=(max_height, max_width),
+                            mode='bilinear',
+                            align_corners=False
+                        ).squeeze(0).squeeze(0)
                     
                     masks.append(mask.unsqueeze(0))  # Add batch dimension to mask [1, H, W]
                     
@@ -533,22 +563,29 @@ class IFLoadImagess:
 
             if not images:
                 img_tensor, mask = self.load_placeholder()
-                return ([img_tensor], [mask], [""], [""], ["0/0"], [0])
+                return ([img_tensor], [mask], [""], [""], ["0/0"], [0], 
+                       img_tensor.unsqueeze(0), mask.unsqueeze(0))
 
-            return (images, masks, paths, filenames, count_strs, count_ints)
+            # Create batched version - now all images are the same size
+            images_batch = torch.cat(images, dim=0)  # [B, H, W, 3]
+            masks_batch = torch.cat(masks, dim=0)    # [B, H, W]
+
+            return (images, masks, paths, filenames, count_strs, count_ints,
+                   images_batch, masks_batch)
 
         except Exception as e:
             logger.error(f"Error in load_images: {e}", exc_info=True)
             img_tensor, mask = self.load_placeholder()
-            return ([img_tensor], [mask], [""], [""], ["error"], [0])
+            return ([img_tensor], [mask], [""], [""], ["error"], [0],
+                   img_tensor.unsqueeze(0), mask.unsqueeze(0))
 
     def load_placeholder(self):
         """Creates and returns a placeholder image tensor and mask"""
         img = Image.new('RGB', (512, 512), color=(73, 109, 137))
         image_array = np.array(img).astype(np.float32) / 255.0
-        image_tensor = torch.from_numpy(image_array).unsqueeze(0)  # [1, H, W, 3]
-        mask = torch.zeros((1, image_array.shape[0], image_array.shape[1]), 
-                       dtype=torch.float32, device="cpu")  # [1, H, W]
+        image_tensor = torch.from_numpy(image_array)  # [H, W, 3]
+        mask = torch.zeros((image_array.shape[0], image_array.shape[1]), 
+                       dtype=torch.float32, device="cpu")  # [H, W]
         return image_tensor, mask
 
     def process_single_image(self, image_path: str):
@@ -579,7 +616,7 @@ class IFLoadImagess:
             img_tensor, mask = self.load_placeholder()
             return ([img_tensor], [mask], [""], [""], ["error"], [0])
     
-@PromptServer.instance.routes.post("/ifai/backup_input")
+@PromptServer.instance.routes.post("/IF_LLM/backup_input")
 async def backup_input_folder(request):
     try:
         success, message = ImageManager.backup_input_folder()
@@ -594,7 +631,7 @@ async def backup_input_folder(request):
             "error": str(e)
         }, status=500)
 
-@PromptServer.instance.routes.post("/ifai/restore_input")
+@PromptServer.instance.routes.post("/IF_LLM/restore_input")
 async def restore_input_folder(request):
     try:
         success, message = ImageManager.restore_input_folder()
@@ -609,7 +646,7 @@ async def restore_input_folder(request):
             "error": str(e)
         }, status=500)
 
-@PromptServer.instance.routes.post("/ifai/refresh_previews")
+@PromptServer.instance.routes.post("/IF_LLM/refresh_previews")
 async def refresh_previews(request):
     try:
         data = await request.json()
@@ -682,7 +719,7 @@ async def refresh_previews(request):
         }, status=500)
 
 # Add route for widget refresh
-@PromptServer.instance.routes.post("/ifai/refresh_widgets")
+@PromptServer.instance.routes.post("/IF_LLM/refresh_widgets")
 async def refresh_widgets(request):
     try:
         input_dir = folder_paths.get_input_directory()
@@ -706,5 +743,5 @@ NODE_CLASS_MAPPINGS = {
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "IF_LoadImagesS": "IF Load Images S 🖼️"
+    "IF_LoadImagesS": "IF Load Images S 🖼��"
 }
