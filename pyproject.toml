@@ -6,7 +6,7 @@ license = { file = "MIT License" }
 dependencies = ["pillow", "numpy"]
 
 [project.urls]
-Repository = "https://github.com/if-ai/ComfyUI_IF_AI_LoadImages.git"
+Repository = "https://github.com/if-ai/ComfyUI_IF_AI_LoadImages"
 #  Used by Comfy Registry https://comfyregistry.org
 
 [tool.comfy]
