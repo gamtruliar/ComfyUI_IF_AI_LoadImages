@@ -148,6 +148,8 @@ class ImageManager:
         folder_path = ImageManager.normalize_path(folder_path)
 
         def is_valid_image(filename: str) -> bool:
+            if filename.startswith(ImageManager.THUMBNAIL_PREFIX):
+                return False
             return any(filename.lower().endswith(ext) for ext in valid_exts)
 
         try:
